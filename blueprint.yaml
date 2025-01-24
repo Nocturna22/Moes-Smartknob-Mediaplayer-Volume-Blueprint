@@ -1,34 +1,20 @@
 blueprint:
-  name: Zigbee2MQTT Smart Knob Media Control (Enhanced)
-  description: Steuert Mediaplayer mit Tuya/Moes Smart Knob in COMMAND/EVENT-Modus
+  name: Universal Zigbee Knob Media Control
+  description: Steuert Mediaplayer mit beliebigem Zigbee2MQTT Drehknopf
   domain: automation
   input:
     smartknob_device:
-      name: Smart Knob Gerät
-      description: Auswahl des Zigbee2MQTT-Knobs (ERS-10TZBVK-AA/TS004F)
+      name: Zigbee Knob Gerät
+      description: Wähle deinen Zigbee2MQTT Drehknopf aus
       selector:
         device:
           integration: zigbee2mqtt
-          manufacturer: "_TZ3000_*"
-          model: 
-            - "ERS-10TZBVK-AA"
-            - "TS004F"
     media_player:
       name: Media Player
       description: Zu steuernder Media Player
       selector:
         entity:
           domain: media_player
-    operation_mode:
-      name: Betriebsmodus
-      description: Modus des Knobs (COMMAND/EVENT)
-      default: event
-      selector:
-        select:
-          options:
-            - command
-            - event
-          mode: dropdown
     volume_step:
       name: Lautstärke-Schritt
       description: Prozentuale Schrittgröße (1-20%)
@@ -58,7 +44,7 @@ trigger:
 
 action:
   - choose:
-      - conditions: "{{ trigger.value in ['rotate_left', 'brightness_step_down'] }}"
+      - conditions: "{{ trigger.value in ['rotate_left', 'brightness_step_down', 'step_down'] }}"
         sequence:
           - service: media_player.volume_set
             target:
@@ -69,7 +55,7 @@ action:
                 {% set step = (input.volume_step / 100) %}
                 {{ [0, current - step]|max }}
 
-      - conditions: "{{ trigger.value in ['rotate_right', 'brightness_step_up'] }}"
+      - conditions: "{{ trigger.value in ['rotate_right', 'brightness_step_up', 'step_up'] }}"
         sequence:
           - service: media_player.volume_set
             target:
@@ -80,7 +66,7 @@ action:
                 {% set step = (input.volume_step / 100) %}
                 {{ [1, current + step]|min }}
 
-      - conditions: "{{ trigger.value in ['single', 'toggle'] && input.press_action != 'none' }}"
+      - conditions: "{{ trigger.value in ['single', 'toggle', 'press'] && input.press_action != 'none' }}"
         sequence:
           - service: >
               {% if input.press_action == 'play_pause' %}
@@ -94,13 +80,6 @@ action:
               {% if input.press_action == 'mute' %}
                 {"is_volume_muted": {{ not state_attr(input.media_player, 'is_volume_muted') }} }
               {% endif %}
-
-  - condition: template
-    value_template: "{{ state_attr(device_id(input.smartknob_device), 'operation_mode') != input.operation_mode }}"
-  - service: mqtt.publish
-    data:
-      topic: "zigbee2mqtt/{{ device.name }}/set"
-      payload: '{"operation_mode": "{{ input.operation_mode }}"}'
 
 mode: queued
 max: 10
