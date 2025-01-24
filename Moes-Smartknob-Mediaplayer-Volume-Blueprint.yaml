@@ -1,69 +1,83 @@
 blueprint:
   name: Moes Smart Knob Media Control
-  description: Steuert Media-Player über den Moes Zigbee Smart Knob via Zigbee2MQTT
+  description: Steuert Media-Player über Moes Zigbee Smart Knob via Zigbee2MQTT
   domain: automation
   input:
     media_player_entity:
-      name: Media Player Entity
-      description: Der zu steuernde Media-Player
+      name: Media Player
+      description: Zu steuernder Media-Player
       selector:
         entity:
           domain: media_player
-    smartknob_device:
-      name: SmartKnob Device
-      description: Das Moes Zigbee Smart Knob Gerät
+    smartknob_entity:
+      name: SmartKnob Event Entity
+      description: Die Zigbee2MQTT-Entität des Smart Knobs (z.B. sensor.0x12345678_action)
       selector:
-        device:
-          manufacturer: Moes
-          model: Zigbee Smart Knob
+        entity:
+          domain: sensor
+          integration: zigbee2mqtt
+    volume_step:
+      name: Volume Schritt in %
+      description: Lautstärkeänderung pro Drehschritt (1-100%)
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: '%'
 
 variables:
-  VOLUME_STEP: 5  # Anpassbarer Volume-Schritt in Prozent
+  vol_step: !input volume_step
 
 trigger:
-  - platform: device
-    domain: zigbee2mqtt
-    device_id: !input smartknob_device
-    type: action
-    subtype: rotate_left
-  - platform: device
-    domain: zigbee2mqtt
-    device_id: !input smartknob_device
-    type: action
-    subtype: rotate_right
-  - platform: device
-    domain: zigbee2mqtt
-    device_id: !input smartknob_device
-    type: action
-    subtype: press
-  - platform: device
-    domain: zigbee2mqtt
-    device_id: !input smartknob_device
-    type: action
-    subtype: press_and_hold
+  - platform: event
+    event_type: zigbee2mqtt_event
+    event_data:
+      device: 
+        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
+      action: rotate_left
+  - platform: event
+    event_type: zigbee2mqtt_event
+    event_data:
+      device: 
+        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
+      action: rotate_right
+  - platform: event
+    event_type: zigbee2mqtt_event
+    event_data:
+      device: 
+        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
+      action: press
+  - platform: event
+    event_type: zigbee2mqtt_event
+    event_data:
+      device: 
+        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
+      action: press_and_hold
 
 action:
   - choose:
-      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'rotate_left' }}"
+      - conditions: "{{ trigger.event.data.action == 'rotate_left' }}"
         sequence:
           - service: media_player.volume_down
             target:
               entity_id: !input media_player_entity
             data:
-              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
-      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'rotate_right' }}"
+              volume_step: "{{ (vol_step / 100)|float }}"
+      - conditions: "{{ trigger.event.data.action == 'rotate_right' }}"
         sequence:
           - service: media_player.volume_up
             target:
               entity_id: !input media_player_entity
             data:
-              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
-      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'press' }}"
+              volume_step: "{{ (vol_step / 100)|float }}"
+      - conditions: "{{ trigger.event.data.action == 'press' }}"
         sequence:
           - service: media_player.media_play_pause
             target:
               entity_id: !input media_player_entity
-      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'press_and_hold' }}"
+      - conditions: "{{ trigger.event.data.action == 'press_and_hold' }}"
         sequence:
           - service: media_player.media_next_track
             target:
