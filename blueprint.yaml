@@ -1,14 +1,21 @@
 blueprint:
   name: Zigbee Knob Media Control
-  description: Steuert Mediaplayer über Zigbee2MQTT Drehknopf (automatische Topic-Generierung)
+  description: Steuert Mediaplayer über Zigbee-Drehknöpfe (mit manueller Eingabe)
   domain: automation
   input:
     zigbee_device:
-      name: Zigbee Knob
-      description: Wähle dein Zigbee2MQTT Drehknopf-Gerät aus der Liste
+      name: Zigbee Gerät (Automatisch)
+      description: Wähle aus der Liste oder gib manuell ein
       selector:
         entity:
           integration: zigbee2mqtt
+      required: false
+    manual_device_name:
+      name: Manueller Gerätename
+      description: "Falls nicht automatisch gefunden (z.B. 'my_knob')"
+      selector:
+        text:
+      required: false
     media_player:
       name: Media Player
       selector:
@@ -32,8 +39,11 @@ blueprint:
 trigger:
   - platform: mqtt
     topic: >-
-      {% set friendly_name = state_attr(input.zigbee_device, 'friendly_name') %}
-      zigbee2mqtt/{{ friendly_name }}/action
+      {% if zigbee_device %}
+        zigbee2mqtt/{{ state_attr(zigbee_device, "friendly_name") }}/action
+      {% else %}
+        zigbee2mqtt/{{ manual_device_name }}/action
+      {% endif %}
     id: knob_action
     value_template: "{{ value_json.action }}"
 
@@ -61,7 +71,7 @@ action:
                 {% set step = (input.volume_step / 100) %}
                 {{ [1.0, current + step]|min }}
 
-      - conditions: "{{ trigger.value in ['single', 'toggle', 'press', 'click'] && input.press_action != 'none' }}"
+      - conditions: "{{ trigger.value in ['single', 'toggle', 'press', 'click'] and input.press_action != 'none' }}"
         sequence:
           - service: >
               {% if input.press_action == 'play_pause' %}
@@ -77,3 +87,4 @@ action:
               {% endif %}
 
 mode: queued
+max_exceeded: silent
