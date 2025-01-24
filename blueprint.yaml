@@ -1,34 +1,35 @@
 blueprint:
-  name: Zigbee2MQTT Smart Knob Media Volume Control
-  description: Steuert Mediaplayer-Lautstärke mit einem Zigbee2MQTT Drehknopf
+  name: Zigbee Smart Knob Media Control
+  description: Steuert Mediaplayer-Lautstärke mit Zigbee2MQTT Drehknopf (ERS-10TZBVK-AA/TS004F)
   domain: automation
   input:
     smartknob_device:
-      name: Zigbee2MQTT Smart Knob Device
-      description: Geräte-ID des Smart Knobs
+      name: Smart Knob Gerät
+      description: Auswahl des Zigbee2MQTT Drehknopfs
       selector:
         device:
           integration: zigbee2mqtt
-          model: "ERS-10TZBVK-AA"  # Für Frient Smart Knob
-          # Für andere Modelle anpassen oder entfernen
+          manufacturer: "_TZ3000_*"
+          model: "ERS-10TZBVK-AA"
     media_player:
-      name: Media Player Entity
+      name: Media Player
       description: Zu steuernder Media Player
       selector:
         entity:
           domain: media_player
     volume_step:
-      name: Volume Step
-      description: Lautstärkeänderung pro Klick (1-10)
+      name: Lautstärke-Schritt
+      description: Prozentuale Schrittgröße (1-10%)
       default: 5
       selector:
         number:
           min: 1
           max: 10
           step: 1
+          unit_of_measurement: '%'
     press_action:
-      name: Knopfdruck Aktion
-      description: Aktion bei Knopfdruck
+      name: Knopfdruck-Funktion
+      description: Aktion bei kurzem Druck
       default: play_pause
       selector:
         select:
@@ -55,4 +56,36 @@ trigger:
     value_template: "{{ value_json.action }}"
     id: button_press
 
-# Der Rest bleibt gleich wie in der vorherigen Version ...
+action:
+  - choose:
+      - conditions: "{{ trigger.id in ['rotate_left', 'rotate_right'] }}"
+        sequence:
+          - service: media_player.volume_set
+            target:
+              entity_id: !input media_player
+            data_template:
+              volume_level: >-
+                {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
+                {% set step = (input.volume_step / 100) %}
+                {% set new_vol = current - step if trigger.id == 'rotate_left' else current + step %}
+                {{ [0, new_vol]|max if trigger.id == 'rotate_left' else [1, new_vol]|min }}
+                
+      - conditions: "{{ trigger.id == 'button_press' and input.press_action != 'none' }}"
+        sequence:
+          - service: >
+              {% if input.press_action == 'play_pause' %}
+                media_player.media_play_pause
+              {% else %}
+                media_player.volume_mute
+              {% endif %}
+            target:
+              entity_id: !input media_player
+            data_template: >-
+              {% if input.press_action == 'mute' %}
+                {"is_volume_muted": {{ not state_attr(input.media_player, 'is_volume_muted') }} }
+              {% else %}
+                {}
+              {% endif %}
+
+mode: queued
+max: 10
