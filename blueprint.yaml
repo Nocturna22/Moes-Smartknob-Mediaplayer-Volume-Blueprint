@@ -1,13 +1,14 @@
 blueprint:
-  name: Raw MQTT Knob Media Control
-  description: Steuert Mediaplayer über direkte MQTT-Topics (Umgeht Geräteerkennung)
+  name: Zigbee Knob Media Control
+  description: Steuert Mediaplayer über Zigbee2MQTT Drehknopf (automatische Topic-Generierung)
   domain: automation
   input:
-    mqtt_topic:
-      name: MQTT Action Topic
-      description: Vollständiges Topic (z.B. zigbee2mqtt/mein_knob/action)
+    zigbee_device:
+      name: Zigbee Knob
+      description: Wähle dein Zigbee2MQTT Drehknopf-Gerät aus der Liste
       selector:
-        text:
+        entity:
+          integration: zigbee2mqtt
     media_player:
       name: Media Player
       selector:
@@ -30,7 +31,9 @@ blueprint:
 
 trigger:
   - platform: mqtt
-    topic: !input mqtt_topic
+    topic: >-
+      {% set friendly_name = state_attr(input.zigbee_device, 'friendly_name') %}
+      zigbee2mqtt/{{ friendly_name }}/action
     id: knob_action
     value_template: "{{ value_json.action }}"
 
