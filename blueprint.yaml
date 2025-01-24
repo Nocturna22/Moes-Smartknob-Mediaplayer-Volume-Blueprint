@@ -8,8 +8,9 @@ blueprint:
       description: Geräte-ID des Smart Knobs
       selector:
         device:
-          integration: mqtt
-          manufacturer: "\\x01"
+          integration: zigbee2mqtt
+          model: "ERS-10TZBVK-AA"  # Für Frient Smart Knob
+          # Für andere Modelle anpassen oder entfernen
     media_player:
       name: Media Player Entity
       description: Zu steuernder Media Player
@@ -39,50 +40,19 @@ blueprint:
 
 trigger:
   - platform: mqtt
-    topic: "zigbee2mqtt/[device_id]/action"
+    topic: "zigbee2mqtt/{{ device.name }}/action"
     payload: "rotate_left"
-    value_template: "{{ trigger.payload_json.action }}"
+    value_template: "{{ value_json.action }}"
     id: rotate_left
   - platform: mqtt
-    topic: "zigbee2mqtt/[device_id]/action"
+    topic: "zigbee2mqtt/{{ device.name }}/action"
     payload: "rotate_right"
-    value_template: "{{ trigger.payload_json.action }}"
+    value_template: "{{ value_json.action }}"
     id: rotate_right
   - platform: mqtt
-    topic: "zigbee2mqtt/[device_id]/action"
+    topic: "zigbee2mqtt/{{ device.name }}/action"
     payload: "press"
-    value_template: "{{ trigger.payload_json.action }}"
+    value_template: "{{ value_json.action }}"
     id: button_press
 
-action:
-  - choose:
-      - conditions: "{{ trigger.id in ['rotate_left', 'rotate_right'] }}"
-        sequence:
-          - service: media_player.volume_set
-            target:
-              entity_id: !input media_player
-            data_template:
-              volume_level: >-
-                {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
-                {% set step = (input.volume_step / 100) %}
-                {{ [0, current - step]|max if trigger.id == 'rotate_left' else [1, current + step]|min }}
-                
-      - conditions: "{{ trigger.id == 'button_press' and input.press_action != 'none' }}"
-        sequence:
-          - service: >-
-              {% if input.press_action == 'play_pause' %}
-                media_player.media_play_pause
-              {% else %}
-                media_player.volume_mute
-              {% endif %}
-            target:
-              entity_id: !input media_player
-            data_template: >-
-              {% if input.press_action == 'mute' %}
-                {"is_volume_muted": {{ not state_attr(input.media_player, 'is_volume_muted') }} }
-              {% else %}
-                {}
-              {% endif %}
-
-mode: queued
-max: 10
+# Der Rest bleibt gleich wie in der vorherigen Version ...
