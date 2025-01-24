@@ -1,17 +1,17 @@
 blueprint:
   name: Zigbee Knob Media Control
-  description: Steuert Mediaplayer über Zigbee-Drehknöpfe (mit Fehlerbehebung)
+  description: Steuert Mediaplayer über Zigbee-Drehknöpfe
   domain: automation
   input:
     zigbee_device:
-      name: Zigbee Gerät (Automatisch)
-      description: Wähle aus der Liste oder gib manuell ein
+      name: Zigbee Gerät
+      description: "Automatische Auswahl aus Zigbee2MQTT-Geräten"
       selector:
         entity:
           integration: zigbee2mqtt
-    manual_device_name:
+    manual_device:
       name: Manueller Gerätename
-      description: "Alternative: Gerätename aus Zigbee2MQTT (z.B. 'my_knob')"
+      description: "Alternativ: Gerätename aus Zigbee2MQTT (z.B. 'my_knob')"
       selector:
         text:
     media_player:
@@ -40,7 +40,7 @@ trigger:
       {% if zigbee_device %}
         zigbee2mqtt/{{ state_attr(zigbee_device, "friendly_name") }}/action
       {% else %}
-        zigbee2mqtt/{{ manual_device_name }}/action
+        zigbee2mqtt/{{ manual_device }}/action
       {% endif %}
     id: knob_action
     value_template: "{{ value_json.action }}"
@@ -55,8 +55,7 @@ action:
             data_template:
               volume_level: >-
                 {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
-                {% set step = (input.volume_step / 100) %}
-                {{ [0.0, current - step]|max }}
+                {{ (current - (input.volume_step / 100))|max(0.0) }}
 
       - conditions: "{{ trigger.value in ['rotate_right', 'brightness_step_up', 'step_up', 'right'] }}"
         sequence:
@@ -66,8 +65,7 @@ action:
             data_template:
               volume_level: >-
                 {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
-                {% set step = (input.volume_step / 100) %}
-                {{ [1.0, current + step]|min }}
+                {{ (current + (input.volume_step / 100))|min(1.0) }}
 
       - conditions: "{{ trigger.value in ['single', 'toggle', 'press', 'click'] and input.press_action != 'none' }}"
         sequence:
