@@ -1,74 +1,101 @@
 blueprint:
-  name: Zigbee Smart Knob Media Control
-  description: Steuert Media-Player über einen Zigbee Knob via Zigbee2MQTT
+  name: "Control Media Player with Tuya ERS-10TZBVK-AA Smart Knob (command mode)"
+  description: >
+    Blueprint to easily configure the **Tuya ERS-10TZBVK-AA Smart Knob** to control a media player when integrated into Home Assistant using **Zigbee2MQTT**.
+
+    It is based directly on the MQTT-Topic as this turned out to be the most responsive way to automate this device.
+
+    **Important Note:** The device needs to be in **COMMAND mode** for the automation to work. The blueprint will automatically check for the correct mode and should keep the device in COMMAND.
+
+    Do a triple button press to change mode manually.
+
+  source_url: https://raw.githubusercontent.com/TriggrHappy/blueprint_tuya_smart_knob/refs/heads/main/blueprint.yaml
   domain: automation
   input:
+    mqtt_topic:
+      name: MQTT Topic
+      description: "The parent MQTT topic of the smart knob (e.g. 'zigbee2mqtt/Tuya Smart Knob)'. Typically the last part will be the given name of your device."
+      selector:
+        text:
     media_player_entity:
-      name: Media Player
-      description: Zu steuernder Media-Player
+      name: Media Player Entity
+      description: "The media player to be controlled."
       selector:
         entity:
           domain: media_player
-    zigbee_device:
-      name: Zigbee Knob Gerät
-      description: Wähle deinen Smart Knob aus der Zigbee2MQTT-Liste
-      selector:
-        device:
-          integration: zigbee2mqtt
-    volume_step:
-      name: Lautstärke-Schritt
-      description: Lautstärkeänderung pro Klick in Prozent (1-100)
-      default: 5
+    step_size:
+      name: Volume Step Size
+      description: "The amount to change the volume for each step (between 0 and 1)"
+      default: 0.05
       selector:
         number:
-          min: 1
-          max: 100
-          step: 1
-          unit_of_measurement: '%'
-
-variables:
-  VOLUME_STEP: !input volume_step
+          min: 0.01
+          max: 0.2
+          step: 0.01
+    automation_mode:
+      name: Automation Mode
+      description: "Experiment with the different modes if your experience does not feel smooth enough. Normally single should work alright."
+      default: single
+      selector:
+        select:
+          options:
+            - single
+            - restart
+            - queued
+            - parallel
 
 trigger:
-  - platform: event
-    event_type: zigbee2mqtt_event
-    event_data:
-      device:
-        ieee_address: >-
-          {{ device_attr(device_id(input.zigbee_device), 'identifiers') | 
-             map('selectattr', 0, 'eq', 'zigbee2mqtt') |
-             map('last') |
-             first }}
-      action: 
-        - rotate_left
-        - rotate_right
-        - press
-        - press_and_hold
+  - platform: mqtt
+    topic: !input mqtt_topic
 
 action:
+  - variables:
+      command: "{{ trigger.payload_json.action }}"
+      step_size: !input step_size
+      media_player_entity: !input media_player_entity
+      mqtt_topic: !input mqtt_topic
+
   - choose:
-      - conditions: "{{ trigger.event.data.action == 'rotate_left' }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'single' or command == 'double' or command == 'rotate_left' or command == 'rotate_right' or command == 'hold' }}"
         sequence:
-          - service: media_player.volume_down
-            target:
-              entity_id: !input media_player_entity
+          - service: mqtt.publish
             data:
-              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
-      - conditions: "{{ trigger.event.data.action == 'rotate_right' }}"
-        sequence:
-          - service: media_player.volume_up
-            target:
-              entity_id: !input media_player_entity
-            data:
-              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
-      - conditions: "{{ trigger.event.data.action == 'press' }}"
+              topic: "{{ mqtt_topic }}/set"
+              payload: '{"operation_mode": "command"}'
+  
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'toggle' }}"
         sequence:
           - service: media_player.media_play_pause
             target:
               entity_id: !input media_player_entity
-      - conditions: "{{ trigger.event.data.action == 'press_and_hold' }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'brightness_step_down' }}"
         sequence:
-          - service: media_player.media_next_track
+          - service: media_player.volume_set
             target:
               entity_id: !input media_player_entity
-    default: []
+            data:
+              volume_level: >
+                {% set current_volume = state_attr(media_player_entity, 'volume_level') | float %}
+                {{ [current_volume - step_size, 0] | max }}
+
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'brightness_step_up' }}"
+        sequence:
+          - service: media_player.volume_set
+            target:
+              entity_id: !input media_player_entity
+            data:
+              volume_level: >
+                {% set current_volume = state_attr(media_player_entity, 'volume_level') | float %}
+                {{ [current_volume + step_size, 1] | min }}
+
+mode: !input automation_mode
+max_exceeded: silent
