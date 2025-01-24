@@ -1,6 +1,6 @@
 blueprint:
-  name: Moes Smart Knob Media Control
-  description: Steuert Media-Player über Moes Zigbee Smart Knob via Zigbee2MQTT
+  name: Zigbee Smart Knob Media Control
+  description: Steuert Media-Player über einen Zigbee Knob via Zigbee2MQTT
   domain: automation
   input:
     media_player_entity:
@@ -10,12 +10,11 @@ blueprint:
         entity:
           domain: media_player
     zigbee_device:
-      name: Zigbee2MQTT Gerät
-      description: Wähle deinen Moes Smart Knob aus der Liste
+      name: Zigbee Knob Gerät
+      description: Wähle deinen Smart Knob aus der Zigbee2MQTT-Liste
       selector:
         device:
           integration: zigbee2mqtt
-          manufacturer: Moes
     volume_step:
       name: Lautstärke-Schritt
       description: Lautstärkeänderung pro Klick in Prozent (1-100)
