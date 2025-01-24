@@ -1,32 +1,43 @@
 blueprint:
-  name: Zigbee Smart Knob Media Control
-  description: Steuert Mediaplayer-Lautstärke mit Zigbee2MQTT Drehknopf (ERS-10TZBVK-AA/TS004F)
+  name: Zigbee2MQTT Smart Knob Media Control (Enhanced)
+  description: Steuert Mediaplayer mit Tuya/Moes Smart Knob in COMMAND/EVENT-Modus
   domain: automation
   input:
     smartknob_device:
       name: Smart Knob Gerät
-      description: Auswahl des Zigbee2MQTT Drehknopfs
+      description: Auswahl des Zigbee2MQTT-Knobs (ERS-10TZBVK-AA/TS004F)
       selector:
         device:
           integration: zigbee2mqtt
           manufacturer: "_TZ3000_*"
-          model: "ERS-10TZBVK-AA"
+          model: 
+            - "ERS-10TZBVK-AA"
+            - "TS004F"
     media_player:
       name: Media Player
       description: Zu steuernder Media Player
       selector:
         entity:
           domain: media_player
+    operation_mode:
+      name: Betriebsmodus
+      description: Modus des Knobs (COMMAND/EVENT)
+      default: event
+      selector:
+        select:
+          options:
+            - command
+            - event
+          mode: dropdown
     volume_step:
       name: Lautstärke-Schritt
-      description: Prozentuale Schrittgröße (1-10%)
+      description: Prozentuale Schrittgröße (1-20%)
       default: 5
       selector:
         number:
           min: 1
-          max: 10
+          max: 20
           step: 1
-          unit_of_measurement: '%'
     press_action:
       name: Knopfdruck-Funktion
       description: Aktion bei kurzem Druck
@@ -42,23 +53,12 @@ blueprint:
 trigger:
   - platform: mqtt
     topic: "zigbee2mqtt/{{ device.name }}/action"
-    payload: "rotate_left"
+    id: knob_action
     value_template: "{{ value_json.action }}"
-    id: rotate_left
-  - platform: mqtt
-    topic: "zigbee2mqtt/{{ device.name }}/action"
-    payload: "rotate_right"
-    value_template: "{{ value_json.action }}"
-    id: rotate_right
-  - platform: mqtt
-    topic: "zigbee2mqtt/{{ device.name }}/action"
-    payload: "press"
-    value_template: "{{ value_json.action }}"
-    id: button_press
 
 action:
   - choose:
-      - conditions: "{{ trigger.id in ['rotate_left', 'rotate_right'] }}"
+      - conditions: "{{ trigger.value in ['rotate_left', 'brightness_step_down'] }}"
         sequence:
           - service: media_player.volume_set
             target:
@@ -67,10 +67,20 @@ action:
               volume_level: >-
                 {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
                 {% set step = (input.volume_step / 100) %}
-                {% set new_vol = current - step if trigger.id == 'rotate_left' else current + step %}
-                {{ [0, new_vol]|max if trigger.id == 'rotate_left' else [1, new_vol]|min }}
-                
-      - conditions: "{{ trigger.id == 'button_press' and input.press_action != 'none' }}"
+                {{ [0, current - step]|max }}
+
+      - conditions: "{{ trigger.value in ['rotate_right', 'brightness_step_up'] }}"
+        sequence:
+          - service: media_player.volume_set
+            target:
+              entity_id: !input media_player
+            data_template:
+              volume_level: >-
+                {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
+                {% set step = (input.volume_step / 100) %}
+                {{ [1, current + step]|min }}
+
+      - conditions: "{{ trigger.value in ['single', 'toggle'] && input.press_action != 'none' }}"
         sequence:
           - service: >
               {% if input.press_action == 'play_pause' %}
@@ -83,9 +93,14 @@ action:
             data_template: >-
               {% if input.press_action == 'mute' %}
                 {"is_volume_muted": {{ not state_attr(input.media_player, 'is_volume_muted') }} }
-              {% else %}
-                {}
               {% endif %}
+
+  - condition: template
+    value_template: "{{ state_attr(device_id(input.smartknob_device), 'operation_mode') != input.operation_mode }}"
+  - service: mqtt.publish
+    data:
+      topic: "zigbee2mqtt/{{ device.name }}/set"
+      payload: '{"operation_mode": "{{ input.operation_mode }}"}'
 
 mode: queued
 max: 10
