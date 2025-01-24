@@ -1,66 +1,88 @@
 blueprint:
-  name: Zigbee2MQTT Smart Knob Media Player Control
-  description: Controls the volume of a Media Player with a Zigbee2MQTT Smart Knob
+  name: Zigbee2MQTT Smart Knob Media Volume Control
+  description: Steuert Mediaplayer-Lautstärke mit einem Zigbee2MQTT Drehknopf
   domain: automation
   input:
-    smart_knob:
-      name: Smart Knob
-      description: Select the Zigbee2MQTT Smart Knob
+    smartknob_device:
+      name: Zigbee2MQTT Smart Knob Device
+      description: Geräte-ID des Smart Knobs
       selector:
-        entity:
+        device:
           integration: mqtt
-          domain: sensor
+          manufacturer: "\\x01"
     media_player:
-      name: Media Player
-      description: Select the Media Player to control
+      name: Media Player Entity
+      description: Zu steuernder Media Player
       selector:
         entity:
           domain: media_player
     volume_step:
       name: Volume Step
-      description: Volume change per rotation step (0.01 to 0.1)
-      default: 0.05
+      description: Lautstärkeänderung pro Klick (1-10)
+      default: 5
       selector:
         number:
-          min: 0.01
-          max: 0.1
-          step: 0.01
+          min: 1
+          max: 10
+          step: 1
+    press_action:
+      name: Knopfdruck Aktion
+      description: Aktion bei Knopfdruck
+      default: play_pause
+      selector:
+        select:
+          options:
+            - play_pause
+            - mute
+            - none
+          mode: dropdown
 
 trigger:
-  - platform: state
-    entity_id: !input smart_knob
-
-variables:
-  action: "{{ trigger.to_state.state }}"
-  volume_step: !input volume_step
+  - platform: mqtt
+    topic: "zigbee2mqtt/[device_id]/action"
+    payload: "rotate_left"
+    value_template: "{{ trigger.payload_json.action }}"
+    id: rotate_left
+  - platform: mqtt
+    topic: "zigbee2mqtt/[device_id]/action"
+    payload: "rotate_right"
+    value_template: "{{ trigger.payload_json.action }}"
+    id: rotate_right
+  - platform: mqtt
+    topic: "zigbee2mqtt/[device_id]/action"
+    payload: "press"
+    value_template: "{{ trigger.payload_json.action }}"
+    id: button_press
 
 action:
   - choose:
-      - conditions:
-          - "{{ action == 'rotate_right' }}"
+      - conditions: "{{ trigger.id in ['rotate_left', 'rotate_right'] }}"
         sequence:
           - service: media_player.volume_set
             target:
               entity_id: !input media_player
-            data:
-              volume_level: "{{ (state_attr(media_player, 'volume_level') | float(0) + volume_step) | min(1) | round(2) }}"
-      - conditions:
-          - "{{ action == 'rotate_left' }}"
+            data_template:
+              volume_level: >-
+                {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
+                {% set step = (input.volume_step / 100) %}
+                {{ [0, current - step]|max if trigger.id == 'rotate_left' else [1, current + step]|min }}
+                
+      - conditions: "{{ trigger.id == 'button_press' and input.press_action != 'none' }}"
         sequence:
-          - service: media_player.volume_set
+          - service: >-
+              {% if input.press_action == 'play_pause' %}
+                media_player.media_play_pause
+              {% else %}
+                media_player.volume_mute
+              {% endif %}
             target:
               entity_id: !input media_player
-            data:
-              volume_level: "{{ (state_attr(media_player, 'volume_level') | float(0) - volume_step) | max(0) | round(2) }}"
-      - conditions:
-          - "{{ action == 'single' }}"
-        sequence:
-          - service: media_player.volume_mute
-            target:
-              entity_id: !input media_player
-            data:
-              is_volume_muted: toggle
-    default:
-      - logger.log:
-          level: INFO
-          message: "Unhandled action: {{ action }}"
+            data_template: >-
+              {% if input.press_action == 'mute' %}
+                {"is_volume_muted": {{ not state_attr(input.media_player, 'is_volume_muted') }} }
+              {% else %}
+                {}
+              {% endif %}
+
+mode: queued
+max: 10
