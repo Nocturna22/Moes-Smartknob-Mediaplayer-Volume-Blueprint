@@ -9,16 +9,16 @@ blueprint:
       selector:
         entity:
           domain: media_player
-    smartknob_entity:
-      name: SmartKnob Event Entity
-      description: Die Zigbee2MQTT-Entität des Smart Knobs (z.B. sensor.0x12345678_action)
+    zigbee_device:
+      name: Zigbee2MQTT Gerät
+      description: Wähle deinen Moes Smart Knob aus der Liste
       selector:
-        entity:
-          domain: sensor
+        device:
           integration: zigbee2mqtt
+          manufacturer: Moes
     volume_step:
-      name: Volume Schritt in %
-      description: Lautstärkeänderung pro Drehschritt (1-100%)
+      name: Lautstärke-Schritt
+      description: Lautstärkeänderung pro Klick in Prozent (1-100)
       default: 5
       selector:
         number:
@@ -28,33 +28,23 @@ blueprint:
           unit_of_measurement: '%'
 
 variables:
-  vol_step: !input volume_step
+  VOLUME_STEP: !input volume_step
 
 trigger:
   - platform: event
     event_type: zigbee2mqtt_event
     event_data:
-      device: 
-        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
-      action: rotate_left
-  - platform: event
-    event_type: zigbee2mqtt_event
-    event_data:
-      device: 
-        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
-      action: rotate_right
-  - platform: event
-    event_type: zigbee2mqtt_event
-    event_data:
-      device: 
-        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
-      action: press
-  - platform: event
-    event_type: zigbee2mqtt_event
-    event_data:
-      device: 
-        ieee_address: "{{ state_attr(input.smartknob_entity, 'ieee') }}"
-      action: press_and_hold
+      device:
+        ieee_address: >-
+          {{ device_attr(device_id(input.zigbee_device), 'identifiers') | 
+             map('selectattr', 0, 'eq', 'zigbee2mqtt') |
+             map('last') |
+             first }}
+      action: 
+        - rotate_left
+        - rotate_right
+        - press
+        - press_and_hold
 
 action:
   - choose:
@@ -64,14 +54,14 @@ action:
             target:
               entity_id: !input media_player_entity
             data:
-              volume_step: "{{ (vol_step / 100)|float }}"
+              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
       - conditions: "{{ trigger.event.data.action == 'rotate_right' }}"
         sequence:
           - service: media_player.volume_up
             target:
               entity_id: !input media_player_entity
             data:
-              volume_step: "{{ (vol_step / 100)|float }}"
+              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
       - conditions: "{{ trigger.event.data.action == 'press' }}"
         sequence:
           - service: media_player.media_play_pause
