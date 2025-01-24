@@ -1,23 +1,20 @@
 blueprint:
-  name: Universal Zigbee Knob Media Control
-  description: Steuert Mediaplayer mit beliebigem Zigbee2MQTT Drehknopf
+  name: Raw MQTT Knob Media Control
+  description: Steuert Mediaplayer über direkte MQTT-Topics (Umgeht Geräteerkennung)
   domain: automation
   input:
-    smartknob_device:
-      name: Zigbee Knob Gerät
-      description: Wähle deinen Zigbee2MQTT Drehknopf aus
+    mqtt_topic:
+      name: MQTT Action Topic
+      description: Vollständiges Topic (z.B. zigbee2mqtt/mein_knob/action)
       selector:
-        device:
-          integration: zigbee2mqtt
+        text:
     media_player:
       name: Media Player
-      description: Zu steuernder Media Player
       selector:
         entity:
           domain: media_player
     volume_step:
-      name: Lautstärke-Schritt
-      description: Prozentuale Schrittgröße (1-20%)
+      name: Lautstärke-Schritt (%)
       default: 5
       selector:
         number:
@@ -25,26 +22,21 @@ blueprint:
           max: 20
           step: 1
     press_action:
-      name: Knopfdruck-Funktion
-      description: Aktion bei kurzem Druck
+      name: Knopfdruck-Aktion
       default: play_pause
       selector:
         select:
-          options:
-            - play_pause
-            - mute
-            - none
-          mode: dropdown
+          options: [play_pause, mute, none]
 
 trigger:
   - platform: mqtt
-    topic: "zigbee2mqtt/{{ device.name }}/action"
+    topic: !input mqtt_topic
     id: knob_action
     value_template: "{{ value_json.action }}"
 
 action:
   - choose:
-      - conditions: "{{ trigger.value in ['rotate_left', 'brightness_step_down', 'step_down'] }}"
+      - conditions: "{{ trigger.value in ['rotate_left', 'brightness_step_down', 'step_down', 'left'] }}"
         sequence:
           - service: media_player.volume_set
             target:
@@ -53,9 +45,9 @@ action:
               volume_level: >-
                 {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
                 {% set step = (input.volume_step / 100) %}
-                {{ [0, current - step]|max }}
+                {{ [0.0, current - step]|max }}
 
-      - conditions: "{{ trigger.value in ['rotate_right', 'brightness_step_up', 'step_up'] }}"
+      - conditions: "{{ trigger.value in ['rotate_right', 'brightness_step_up', 'step_up', 'right'] }}"
         sequence:
           - service: media_player.volume_set
             target:
@@ -64,9 +56,9 @@ action:
               volume_level: >-
                 {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
                 {% set step = (input.volume_step / 100) %}
-                {{ [1, current + step]|min }}
+                {{ [1.0, current + step]|min }}
 
-      - conditions: "{{ trigger.value in ['single', 'toggle', 'press'] && input.press_action != 'none' }}"
+      - conditions: "{{ trigger.value in ['single', 'toggle', 'press', 'click'] && input.press_action != 'none' }}"
         sequence:
           - service: >
               {% if input.press_action == 'play_pause' %}
@@ -82,4 +74,3 @@ action:
               {% endif %}
 
 mode: queued
-max: 10
