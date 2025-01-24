@@ -65,12 +65,8 @@ action:
               volume_level: >-
                 {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
                 {% set step = (input.volume_step / 100) %}
-                {% if trigger.id == 'rotate_left' %}
-                  {{ [0, current - step]|max }}
-                {% else %}
-                  {{ [1, current + step]|min }}
-                {% endif %}
-      - conditions: "{{ trigger.id == 'button_press' && input.press_action != 'none' }}"
+                {{ [0, current - step]|max if trigger.id == 'rotate_left' else [1, current + step]|min }}
+      - conditions: "{{ trigger.id == 'button_press' and input.press_action != 'none' }}"
         sequence:
           - service: >
               {% if input.press_action == 'play_pause' %}
@@ -80,9 +76,11 @@ action:
               {% endif %}
             target:
               entity_id: !input media_player
-            data:
+            data_template: >
               {% if input.press_action == 'mute' %}
-                is_volume_muted: "{{ not state_attr(input.media_player, 'is_volume_muted') }}"
+                { "is_volume_muted": "{{ not state_attr(input.media_player, 'is_volume_muted') }}" }
+              {% else %}
+                {}
               {% endif %}
 
 mode: queued
