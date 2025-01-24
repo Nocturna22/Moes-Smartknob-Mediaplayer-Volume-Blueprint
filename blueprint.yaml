@@ -1,85 +1,71 @@
 blueprint:
-  name: Zigbee Knob Media Control
-  description: Steuert Mediaplayer über Zigbee-Drehknöpfe
+  name: Moes Smart Knob Media Control
+  description: Steuert Media-Player über den Moes Zigbee Smart Knob via Zigbee2MQTT
   domain: automation
   input:
-    zigbee_device:
-      name: Zigbee Gerät
-      description: "Automatische Auswahl aus Zigbee2MQTT-Geräten"
-      selector:
-        entity:
-          integration: zigbee2mqtt
-    manual_device:
-      name: Manueller Gerätename
-      description: "Alternativ: Gerätename aus Zigbee2MQTT (z.B. 'my_knob')"
-      selector:
-        text:
-    media_player:
-      name: Media Player
+    media_player_entity:
+      name: Media Player Entity
+      description: Der zu steuernde Media-Player
       selector:
         entity:
           domain: media_player
-    volume_step:
-      name: Lautstärke-Schritt (%)
-      default: 5
+    smartknob_device:
+      name: SmartKnob Device
+      description: Das Moes Zigbee Smart Knob Gerät
       selector:
-        number:
-          min: 1
-          max: 20
-          step: 1
-    press_action:
-      name: Knopfdruck-Aktion
-      default: play_pause
-      selector:
-        select:
-          options: [play_pause, mute, none]
+        device:
+          manufacturer: Moes
+          model: Zigbee Smart Knob
+
+variables:
+  VOLUME_STEP: 5  # Anpassbarer Volume-Schritt in Prozent
 
 trigger:
-  - platform: mqtt
-    topic: >-
-      {% if zigbee_device %}
-        zigbee2mqtt/{{ state_attr(zigbee_device, "friendly_name") }}/action
-      {% else %}
-        zigbee2mqtt/{{ manual_device }}/action
-      {% endif %}
-    id: knob_action
-    value_template: "{{ value_json.action }}"
+  - platform: device
+    domain: zigbee2mqtt
+    device_id: !input smartknob_device
+    type: action
+    subtype: rotate_left
+  - platform: device
+    domain: zigbee2mqtt
+    device_id: !input smartknob_device
+    type: action
+    subtype: rotate_right
+  - platform: device
+    domain: zigbee2mqtt
+    device_id: !input smartknob_device
+    type: action
+    subtype: press
+  - platform: device
+    domain: zigbee2mqtt
+    device_id: !input smartknob_device
+    type: action
+    subtype: press_and_hold
 
 action:
   - choose:
-      - conditions: "{{ trigger.value in ['rotate_left', 'brightness_step_down', 'step_down', 'left'] }}"
+      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'rotate_left' }}"
         sequence:
-          - service: media_player.volume_set
+          - service: media_player.volume_down
             target:
-              entity_id: !input media_player
-            data_template:
-              volume_level: >-
-                {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
-                {{ (current - (input.volume_step / 100))|max(0.0) }}
-
-      - conditions: "{{ trigger.value in ['rotate_right', 'brightness_step_up', 'step_up', 'right'] }}"
+              entity_id: !input media_player_entity
+            data:
+              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
+      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'rotate_right' }}"
         sequence:
-          - service: media_player.volume_set
+          - service: media_player.volume_up
             target:
-              entity_id: !input media_player
-            data_template:
-              volume_level: >-
-                {% set current = state_attr(input.media_player, 'volume_level')|default(0) %}
-                {{ (current + (input.volume_step / 100))|min(1.0) }}
-
-      - conditions: "{{ trigger.value in ['single', 'toggle', 'press', 'click'] and input.press_action != 'none' }}"
+              entity_id: !input media_player_entity
+            data:
+              volume_step: "{{ (VOLUME_STEP / 100)|float }}"
+      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'press' }}"
         sequence:
-          - service: >
-              {% if input.press_action == 'play_pause' %}
-                media_player.media_play_pause
-              {% else %}
-                media_player.volume_mute
-              {% endif %}
+          - service: media_player.media_play_pause
             target:
-              entity_id: !input media_player
-            data_template: >-
-              {% if input.press_action == 'mute' %}
-                {"is_volume_muted": {{ not state_attr(input.media_player, 'is_volume_muted') }} }
-              {% endif %}
-
-mode: queued
+              entity_id: !input media_player_entity
+      - conditions: "{{ trigger.type == 'action' and trigger.subtype == 'press_and_hold' }}"
+        sequence:
+          - service: media_player.media_next_track
+            target:
+              entity_id: !input media_player_entity
+    default: []
