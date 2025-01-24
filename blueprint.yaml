@@ -1,42 +1,57 @@
 blueprint:
   name: Zigbee2MQTT Smart Knob Media Player Control
-  description: Steuert die Lautstärke eines Media Players mit einem Zigbee2MQTT Smart Knob
+  description: Controls the volume of a Media Player with a Zigbee2MQTT Smart Knob
   domain: automation
   input:
     smart_knob:
       name: Smart Knob
-      description: Wähle den Zigbee2MQTT Smart Knob
+      description: Select the Zigbee2MQTT Smart Knob
       selector:
         entity:
           integration: mqtt
           domain: sensor
     media_player:
       name: Media Player
-      description: Wähle den zu steuernden Media Player
+      description: Select the Media Player to control
       selector:
         entity:
           domain: media_player
+    volume_step:
+      name: Volume Step
+      description: Volume change per rotation step (0.01 to 0.1)
+      default: 0.05
+      selector:
+        number:
+          min: 0.01
+          max: 0.1
+          step: 0.01
 
 trigger:
   - platform: state
     entity_id: !input smart_knob
 
+variables:
+  action: "{{ trigger.to_state.state }}"
+  volume_step: !input volume_step
+
 action:
-  - variables:
-      action: "{{ trigger.to_state.state }}"
   - choose:
       - conditions:
           - "{{ action == 'rotate_right' }}"
         sequence:
-          - service: media_player.volume_up
+          - service: media_player.volume_set
             target:
               entity_id: !input media_player
+            data:
+              volume_level: "{{ (state_attr(media_player, 'volume_level') | float(0) + volume_step) | min(1) | round(2) }}"
       - conditions:
           - "{{ action == 'rotate_left' }}"
         sequence:
-          - service: media_player.volume_down
+          - service: media_player.volume_set
             target:
               entity_id: !input media_player
+            data:
+              volume_level: "{{ (state_attr(media_player, 'volume_level') | float(0) - volume_step) | max(0) | round(2) }}"
       - conditions:
           - "{{ action == 'single' }}"
         sequence:
@@ -45,3 +60,7 @@ action:
               entity_id: !input media_player
             data:
               is_volume_muted: toggle
+    default:
+      - logger.log:
+          level: INFO
+          message: "Unhandled action: {{ action }}"
