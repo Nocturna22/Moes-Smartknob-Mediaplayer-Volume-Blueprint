@@ -1,6 +1,6 @@
 blueprint:
   name: Zigbee Knob Media Control
-  description: Steuert Mediaplayer über Zigbee-Drehknöpfe (mit manueller Eingabe)
+  description: Steuert Mediaplayer über Zigbee-Drehknöpfe (mit Fehlerbehebung)
   domain: automation
   input:
     zigbee_device:
@@ -9,13 +9,11 @@ blueprint:
       selector:
         entity:
           integration: zigbee2mqtt
-      required: false
     manual_device_name:
       name: Manueller Gerätename
-      description: "Falls nicht automatisch gefunden (z.B. 'my_knob')"
+      description: "Alternative: Gerätename aus Zigbee2MQTT (z.B. 'my_knob')"
       selector:
         text:
-      required: false
     media_player:
       name: Media Player
       selector:
@@ -87,4 +85,3 @@ action:
               {% endif %}
 
 mode: queued
-max_exceeded: silent
